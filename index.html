@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Sessions</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --card2:#1f232c; --line:#2a2f3a; --fg:#e6e8ee; --muted:#8b93a7; --accent:#d97757;
+          --busy:#f0b429; --idle:#4cc38a; --wait:#e5484d; --bar:#3b4252; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  header { display:flex; align-items:center; gap:16px; padding:12px 24px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:2; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header .stat { color:var(--muted); font-size:13px; }
+  header .stat b { color:var(--fg); }
+  #conn { margin-left:auto; font-size:12px; color:var(--muted); }
+  #conn::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--idle); margin-right:6px; }
+  #conn.off::before { background:var(--wait); }
+  main { padding:20px 24px; display:grid; gap:24px; }
+  h2 { font-size:13px; color:var(--muted); font-weight:600; letter-spacing:.04em; text-transform:uppercase; margin:0 0 10px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:12px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  /* 플랜 한도 */
+  .limits { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px; }
+  .limit .lt { display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px; }
+  .limit .lt b { font-weight:600; }
+  .limit .pct { font-variant-numeric:tabular-nums; }
+  .meter { height:8px; background:var(--bar); border-radius:999px; overflow:hidden; }
+  .meter > i { display:block; height:100%; background:var(--idle); border-radius:999px; transition:width .4s; }
+  .meter.warning > i { background:var(--busy); } .meter.critical > i, .meter.exceeded > i { background:var(--wait); }
+  .limit .sub { color:var(--muted); font-size:12px; margin-top:6px; }
+  .err { color:var(--wait); font-size:12px; }
+  /* 토큰 사용량 */
+  .usage { display:grid; grid-template-columns:minmax(220px, 1fr) 2fr; gap:12px; }
+  @media (max-width: 900px) { .usage { grid-template-columns:1fr; } }
+  .kpis { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .kpi .k { color:var(--muted); font-size:12px; }
+  .kpi .v { font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .kpi .s { color:var(--muted); font-size:11.5px; }
+  .chart { display:flex; align-items:flex-end; gap:3px; height:90px; margin-top:8px; }
+  .chart .b { flex:1; background:var(--accent); opacity:.85; border-radius:3px 3px 0 0; min-height:1px; position:relative; }
+  .chart .b.z { background:var(--bar); opacity:.6; }
+  .chart .b:hover::after { content:attr(data-tip); position:absolute; bottom:100%; left:50%; transform:translateX(-50%); background:#000; color:#fff; font-size:11px; padding:3px 6px; border-radius:4px; white-space:nowrap; margin-bottom:4px; z-index:3; }
+  .axis { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; margin-top:4px; }
+  .models { margin-top:10px; display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12px; color:var(--muted); }
+  .models b { color:var(--fg); font-weight:500; }
+  .days { display:flex; gap:6px; margin-top:10px; }
+  .days .d { flex:1; text-align:center; font-size:11px; color:var(--muted); }
+  .days .d b { display:block; color:var(--fg); font-weight:500; font-variant-numeric:tabular-nums; }
+  /* 세션 카드 */
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; cursor:pointer; transition:background .15s, border-color .15s, transform .1s; display:flex; flex-direction:column; gap:8px; min-height:150px; }
+  .card:hover { background:var(--card2); border-color:#3a4150; }
+  .card:active { transform:scale(.99); }
+  .card.flash { border-color:var(--accent); }
+  .top { display:flex; align-items:center; gap:8px; }
+  .dot { width:9px; height:9px; border-radius:50%; flex:none; }
+  .dot.busy { background:var(--busy); box-shadow:0 0 0 3px rgba(240,180,41,.18); animation:pulse 1.4s infinite; }
+  .dot.idle { background:var(--idle); }
+  .dot.waiting { background:var(--wait); box-shadow:0 0 0 3px rgba(229,72,77,.2); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .title { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:999px; background:#262b36; color:var(--muted); white-space:nowrap; }
+  .badge.busy { color:var(--busy); } .badge.idle { color:var(--idle); } .badge.waiting { color:var(--wait); }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { font-size:11px; padding:2px 8px; border-radius:6px; background:#232835; color:#c9ceda; font-family:ui-monospace, Menlo, monospace; }
+  .chip.model { color:#9ec1ff; } .chip.effort { color:#f0b429; } .chip.effort.max { color:#ff8a8a; } .chip.effort.low, .chip.effort.medium { color:var(--muted); }
+  .line { color:var(--muted); font-size:12.5px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .line.reply { color:#c9ceda; -webkit-line-clamp:3; }
+  .line b { color:var(--fg); font-weight:500; }
+  .meta { display:flex; gap:12px; color:var(--muted); font-size:11.5px; margin-top:auto; padding-top:6px; border-top:1px dashed var(--line); flex-wrap:wrap; }
+  .meta code { font-family:ui-monospace, Menlo, monospace; font-size:11px; }
+  .tool { color:var(--accent); }
+  .empty { color:var(--muted); padding:40px; text-align:center; }
+  footer { color:var(--muted); font-size:12px; padding:12px 24px 24px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Claude Sessions</h1>
+  <span class="stat">전체 <b id="n-all">0</b></span>
+  <span class="stat">작업 중 <b id="n-busy">0</b></span>
+  <span class="stat">입력 대기 <b id="n-wait">0</b></span>
+  <span id="conn">연결 중</span>
+</header>
+<main>
+  <section><h2>플랜 한도</h2><div id="limits" class="limits"><div class="empty">불러오는 중…</div></div></section>
+  <section><h2>토큰 사용량 <span style="font-weight:400">· 로컬 트랜스크립트 집계</span></h2><div id="usage" class="usage"></div></section>
+  <section><h2>세션</h2><div id="sessions"><div class="empty">세션을 불러오는 중…</div></div></section>
+</main>
+<footer>카드를 클릭하면 해당 Terminal 탭으로 이동합니다. 백그라운드 세션은 새 탭에서 attach 됩니다. 플랜 한도는 1분마다, 토큰 집계는 10초마다 갱신됩니다.</footer>
+<script>
+const $ = s => document.querySelector(s);
+const plain = s => String(s ?? '').replace(/```[\s\S]*?```/g, '[코드]').replace(/^#{1,6}\s+/gm, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/\n+/g, ' ');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtAgo = ms => { if (!ms) return '-'; const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return `${Math.floor(s)}초 전`; if (s < 3600) return `${Math.floor(s/60)}분 전`;
+  if (s < 86400) return `${Math.floor(s/3600)}시간 전`; return `${Math.floor(s/86400)}일 전`; };
+const fmtIn = ms => { const s = Math.max(0, (ms - Date.now()) / 1000); if (s < 3600) return `${Math.ceil(s/60)}분 후`;
+  if (s < 86400) return `${Math.floor(s/3600)}시간 ${Math.round((s%3600)/60)}분 후`; return `${Math.floor(s/86400)}일 ${Math.floor((s%86400)/3600)}시간 후`; };
+const fmtTok = n => n == null ? '-' : n >= 1e9 ? (n/1e9).toFixed(2)+'B' : n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? Math.round(n/1e3)+'k' : String(n);
+const fmtClock = iso => new Date(iso).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
+const shortModel = m => String(m || '').replace(/^claude-/, '').replace(/-\d{8}$/, '');
+
+function state(s) {
+  if (s.status === 'busy') return 'busy';
+  return s.lastType === 'assistant' ? 'waiting' : 'idle';  // idle인데 마지막 기록이 답변이면 입력 대기
+}
+const label = { busy:'작업 중', idle:'유휴', waiting:'입력 대기' };
+const LIMIT_NAME = { session:'5시간 세션', weekly_all:'주간 · 전체 모델', weekly_scoped:'주간' };
+
+function renderLimits(plan) {
+  if (!plan) return;
+  const el = $('#limits');
+  if (!plan.limits && plan.error) { el.innerHTML = `<div class="panel err">플랜 한도를 가져오지 못했습니다: ${esc(plan.error)}</div>`; return; }
+  const items = (plan.limits || []).map(l => {
+    const name = l.kind === 'weekly_scoped' && l.scope ? `주간 · ${esc(l.scope)}` : (LIMIT_NAME[l.kind] || l.kind);
+    return `<div class="panel limit">
+      <div class="lt"><b>${name}</b><span class="pct">${l.percent}%</span></div>
+      <div class="meter ${esc(l.severity)}"><i style="width:${Math.min(100, l.percent)}%"></i></div>
+      <div class="sub">리셋 ${fmtClock(l.resetsAt)} · ${fmtIn(Date.parse(l.resetsAt))}${l.active ? ' · <span style="color:var(--busy)">현재 창</span>' : ''}</div>
+    </div>`; });
+  if (plan.extra) items.push(`<div class="panel limit"><div class="lt"><b>추가 사용량 크레딧</b><span class="pct">${plan.extra.utilization ?? 0}%</span></div><div class="meter"><i style="width:${plan.extra.utilization ?? 0}%"></i></div><div class="sub">${plan.extra.used ?? 0} / ${plan.extra.limit ?? '-'}</div></div>`);
+  el.innerHTML = items.join('') + (plan.error ? `<div class="panel err">최근 갱신 실패: ${esc(plan.error)} (이전 값 표시 중)</div>` : '');
+}
+
+function renderUsage(u) {
+  if (!u) return;
+  const total = a => a.in + a.cr + a.cc;
+  const maxOut = Math.max(1, ...u.hourly.map(h => h.out));
+  const hours = u.hourly.map(h => { const hh = new Date(h.t).getHours();
+    return `<div class="b ${h.out ? '' : 'z'}" style="height:${Math.max(2, h.out / maxOut * 100)}%" data-tip="${String(hh).padStart(2,'0')}시 · 출력 ${fmtTok(h.out)} · 입력 ${fmtTok(h.in)}"></div>`; }).join('');
+  const models = Object.entries(u.byModel).sort((a, b) => b[1].out - a[1].out)
+    .map(([m, a]) => `<span><b>${esc(shortModel(m))}</b> 출력 ${fmtTok(a.out)} · 입력 ${fmtTok(total(a))} · ${a.msgs}건</span>`).join('');
+  const days = u.days.map(d => `<div class="d"><b>${fmtTok(d.out)}</b>${d.day.slice(5).replace('-', '/')}</div>`).join('');
+  $('#usage').innerHTML = `
+    <div class="panel kpis">
+      <div class="kpi"><div class="k">오늘 출력 토큰</div><div class="v">${fmtTok(u.today.out)}</div><div class="s">입력(캐시 포함) ${fmtTok(total(u.today))} · ${u.today.msgs}건</div></div>
+      <div class="kpi"><div class="k">최근 7일 출력 토큰</div><div class="v">${fmtTok(u.week.out)}</div><div class="s">입력(캐시 포함) ${fmtTok(total(u.week))} · ${u.week.msgs}건</div></div>
+      <div class="kpi" style="grid-column:1/-1"><div class="k">일별 출력 토큰 (7일)</div><div class="days">${days}</div></div>
+    </div>
+    <div class="panel">
+      <div class="k" style="color:var(--muted);font-size:12px">최근 24시간 · 시간별 출력 토큰</div>
+      <div class="chart">${hours}</div>
+      <div class="axis"><span>${new Date(u.hourly[0].t).getHours()}시</span><span>지금</span></div>
+      <div class="models">${models || '<span>최근 7일 기록 없음</span>'}</div>
+    </div>`;
+}
+
+let prev = {};
+function renderSessions(sessions) {
+  $('#n-all').textContent = sessions.length;
+  $('#n-busy').textContent = sessions.filter(s => state(s) === 'busy').length;
+  $('#n-wait').textContent = sessions.filter(s => state(s) === 'waiting').length;
+  if (!sessions.length) { $('#sessions').innerHTML = '<div class="empty">실행 중인 Claude Code 세션이 없습니다.</div>'; return; }
+  const groups = {};
+  for (const s of sessions) (groups[s.project] ||= []).push(s);
+  $('#sessions').innerHTML = Object.entries(groups).map(([proj, list]) => `
+    <section class="project" style="margin-bottom:18px"><h2>${esc(proj)} <span style="font-weight:400">· ${list.length}</span></h2><div class="grid">
+    ${list.map(s => { const st = state(s); const changed = prev[s.pid] && prev[s.pid] !== s.lastActivity; return `
+      <div class="card ${changed ? 'flash' : ''}" data-pid="${s.pid}" title="${esc(s.cwd)}">
+        <div class="top"><span class="dot ${st}"></span><span class="title">${esc(s.title)}</span><span class="badge ${st}">${label[st]}</span></div>
+        <div class="chips">
+          ${s.model ? `<span class="chip model">${esc(shortModel(s.model))}</span>` : ''}
+          ${s.effort ? `<span class="chip effort ${esc(s.effort)}">effort ${esc(s.effort)}</span>` : ''}
+          ${s.usage7d ? `<span class="chip">7일 출력 ${fmtTok(s.usage7d.out)} · 입력 ${fmtTok(s.usage7d.in)}</span>` : ''}
+        </div>
+        ${s.lastPrompt ? `<div class="line"><b>요청</b> ${esc(plain(s.lastPrompt))}</div>` : ''}
+        ${s.lastReply ? `<div class="line reply">${esc(plain(s.lastReply))}</div>` : ''}
+        <div class="meta">
+          ${s.lastTool && st === 'busy' ? `<span class="tool">⚙ ${esc(s.lastTool)}</span>` : ''}
+          <span>활동 ${fmtAgo(s.lastActivity)}</span>
+          <span>시작 ${fmtAgo(s.startedAt)}</span>
+          <span>컨텍스트 잔여 ${fmtTok(s.tokensLeft)}</span>
+          <span><code>${esc(s.name)}</code>${s.tty ? ` · <code>${esc(s.tty.replace('/dev/',''))}</code>` : ' · bg'}</span>
+        </div>
+      </div>`; }).join('')}
+    </div></section>`).join('');
+  prev = Object.fromEntries(sessions.map(s => [s.pid, s.lastActivity]));
+}
+
+function render(d) { renderLimits(d.plan); renderUsage(d.usage); renderSessions(d.sessions || []); }
+
+document.addEventListener('click', async e => {
+  const card = e.target.closest('.card'); if (!card) return;
+  const pid = Number(card.dataset.pid);
+  card.style.opacity = .6;
+  try { await fetch('/api/focus', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ pid }) }); }
+  finally { card.style.opacity = ''; }
+});
+
+function connect() {
+  const es = new EventSource('/api/events');
+  es.onopen = () => { $('#conn').className = ''; $('#conn').textContent = '실시간'; };
+  es.onmessage = ev => render(JSON.parse(ev.data));
+  es.onerror = () => { $('#conn').className = 'off'; $('#conn').textContent = '재연결 중'; es.close(); setTimeout(connect, 2000); };
+}
+connect();
+</script>
+</body>
+</html>

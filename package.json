@@ -1,0 +1,13 @@
+{
+  "name": "claude-sessions",
+  "version": "0.1.0",
+  "description": "Read-only local dashboard for all running Claude Code sessions on your Mac. Click a card to jump to that session's Terminal tab. Shows plan limits, token usage, model and effort per session.",
+  "bin": { "claude-sessions": "./server.js" },
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "os": ["darwin"],
+  "keywords": ["claude", "claude-code", "dashboard", "sessions", "terminal", "macos"],
+  "repository": { "type": "git", "url": "https://github.com/klo-dongha/claude-sessions" },
+  "license": "MIT",
+  "files": ["server.js", "index.html", "README.md", "LICENSE"]
+}
